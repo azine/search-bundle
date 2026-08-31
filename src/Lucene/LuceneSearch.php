@@ -1,92 +1,76 @@
 <?php
 
+declare(strict_types=1);
+
 namespace EWZ\Bundle\SearchBundle\Lucene;
 
 use Zend\Search\Lucene\Analysis\Analyzer\Analyzer;
+use Zend\Search\Lucene\Document as ZendDocument;
+use Zend\Search\Lucene\Index;
 use Zend\Search\Lucene\Index\Term;
 use Zend\Search\Lucene\Search\QueryHit;
-use Zend\Search\Lucene\Document as ZendDocument;
 
 class LuceneSearch
 {
-    /** @var \Zend\Search\Lucene\Index  */
-    protected $index;
+    protected Index $index;
 
     /**
-     * Instanciate the Auth service
-     *
-     * @param string   $luceneIndexPath
-     * @param Analyzer $analyzer
+     * @param class-string<Analyzer>|null $analyzer
      */
-    public function __construct($luceneIndexPath, $analyzer = null)
+    public function __construct(string $luceneIndexPath, ?string $analyzer = null)
     {
-        if (file_exists($luceneIndexPath)) {
-            $this->index = Lucene::open($luceneIndexPath);
-        } else {
-            $this->index = Lucene::create($luceneIndexPath);
+        if (null !== $analyzer) {
+            if (!is_a($analyzer, Analyzer::class, true)) {
+                throw new \InvalidArgumentException(sprintf(
+                    'The configured analyzer "%s" must extend %s.',
+                    $analyzer,
+                    Analyzer::class,
+                ));
+            }
+
+            Analyzer::setDefault(new $analyzer());
         }
 
-        if (isset($analyzer)) {
-            Analyzer::setDefault(new $analyzer);
-        }
+        $this->index = file_exists($luceneIndexPath)
+            ? Lucene::open($luceneIndexPath)
+            : Lucene::create($luceneIndexPath);
     }
 
-    /**
-     * @return \Zend\Search\Lucene\Index
-     */
-    public function getIndex() {
+    public function getIndex(): Index
+    {
         return $this->index;
     }
 
-    /**
-     * This is a convience function to add a document to the index
-     *
-     * @param ZendDocument $document
-     */
-    public function addDocument( $document)
+    public function addDocument(ZendDocument $document): void
     {
         $this->deleteDocument($document);
         $this->index->addDocument($document);
     }
 
-    /**
-     * A convience function to commit and optimize the index
-     */
-    public function updateIndex()
+    public function updateIndex(): void
     {
         $this->index->commit();
         $this->index->optimize();
     }
 
     /**
-     * @param $query
-     *
      * @return QueryHit[]
      */
-    public function find($query)
+    public function find(mixed $query, mixed ...$arguments): array
     {
-        return call_user_func_array(array($this->index, 'find'), func_get_args());
+        return $this->index->find($query, ...$arguments);
     }
 
-    /**
-     * @param ZendDocument $document
-     */
-    public function updateDocument(ZendDocument $document)
+    public function updateDocument(ZendDocument $document): void
     {
         $this->addDocument($document);
     }
 
-    /**
-     * @param ZendDocument $document
-     */
-    public function deleteDocument(ZendDocument $document)
+    public function deleteDocument(ZendDocument $document): void
     {
-        // Search for documents with the same Key value.
-        $term = new Term($document->getField('key')->value, 'key');
-        $docIds = $this->index->termDocs($term);
+        $term = new Term((string) $document->getField('key')->value, 'key');
 
-        // Delete any documents found.
-        foreach ($docIds as $id) {
+        foreach ($this->index->termDocs($term) as $id) {
             $this->index->delete($id);
         }
     }
