@@ -1,26 +1,37 @@
 <?php
 
+declare(strict_types=1);
+
 namespace EWZ\Tests\Bundle\SearchBundle\Lucene;
 
 use EWZ\Bundle\SearchBundle\Lucene\Document;
 use EWZ\Bundle\SearchBundle\Lucene\Field;
+use PHPUnit\Framework\TestCase;
+use Zend\Search\Lucene\Exception\InvalidArgumentException;
 
-class LuceneDocumentTest extends \PHPUnit_Framework_TestCase
+final class LuceneDocumentTest extends TestCase
 {
-    public function testGetType()
+    public function testReturnsTheFactoryTypeForEveryBundleField(): void
     {
-        $testDoc = new Document();
+        $document = new Document();
+        $document->addField(Field::binary('binary', 'value'));
+        $document->addField(Field::keyword('keyword', 'value'));
+        $document->addField(Field::text('text', 'value'));
+        $document->addField(Field::unIndexed('unindexed', 'value'));
+        $document->addField(Field::unStored('unstored', 'value'));
 
-        $testDoc->addField(Field::Binary('Binary', 'value'));
-        $testDoc->addField(Field::Keyword('Keyword', 'value'));
-        $testDoc->addField(Field::Text('Text', 'value'));
-        $testDoc->addField(Field::UnIndexed('UnIndexed', 'value'));
-        $testDoc->addField(Field::UnStored('UnStored', 'value'));
+        self::assertSame('Binary', $document->getFieldType('binary'));
+        self::assertSame('Keyword', $document->getFieldType('keyword'));
+        self::assertSame('Text', $document->getFieldType('text'));
+        self::assertSame('UnIndexed', $document->getFieldType('unindexed'));
+        self::assertSame('UnStored', $document->getFieldType('unstored'));
+    }
 
-        $this->assertEquals('Binary', $testDoc->getFieldType('Binary'));
-        $this->assertEquals('Keyword', $testDoc->getFieldType('Keyword'));
-        $this->assertEquals('Text', $testDoc->getFieldType('Text'));
-        $this->assertEquals('UnIndexed', $testDoc->getFieldType('UnIndexed'));
-        $this->assertEquals('UnStored', $testDoc->getFieldType('UnStored'));
+    public function testUnknownFieldFailsWithTheZendSearchException(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Field name "missing" not found in document.');
+
+        (new Document())->getFieldType('missing');
     }
 }

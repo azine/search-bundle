@@ -1,44 +1,36 @@
 <?php
 
+declare(strict_types=1);
+
 namespace EWZ\Bundle\SearchBundle\Lucene;
 
-use EWZ\Bundle\SearchBundle\Lucene\Lucene;
-
-class LuceneIndexManager
+final class LuceneIndexManager
 {
-	/** @var array */
-	private $indices = array();
+    /** @var array<string, LuceneSearch> */
+    private array $indices = [];
 
     /**
-     * Instanciate of the index manager
-     *
-     * @param array  $indices
-     * @param string $indexClass
+     * @param array<string, array{path: string, analyzer: string}> $indices
+     * @param class-string<LuceneSearch>                           $indexClass
      */
-    public function __construct(array $indices, $indexClass)
+    public function __construct(array $indices, string $indexClass)
     {
-    	foreach ($indices as $name => $config) {
-    		$analyzer = $config['analyzer'];
-    		$path = $config['path'];
-    		$index = new $indexClass($path, $analyzer);
-    		$this->indices[$name] = $index;
-    	}
+        if (!is_a($indexClass, LuceneSearch::class, true)) {
+            throw new \InvalidArgumentException(sprintf(
+                'The configured Lucene search class "%s" must extend %s.',
+                $indexClass,
+                LuceneSearch::class,
+            ));
+        }
+
+        foreach ($indices as $name => $config) {
+            $index = new $indexClass($config['path'], $config['analyzer']);
+            $this->indices[$name] = $index;
+        }
     }
 
-    /**
-     * Get the specified lucene search-index
-     *
-     * @param string $indexName
-     *
-     * @return LuceneSearch
-     */
-    public function getIndex($indexName)
+    public function getIndex(string $indexName): ?LuceneSearch
     {
-    	if (array_key_exists($indexName, $this->indices)) {
-	    	return $this->indices[$indexName];
-    	}
-
-    	return null;
+        return $this->indices[$indexName] ?? null;
     }
-
 }

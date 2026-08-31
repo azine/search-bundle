@@ -1,117 +1,130 @@
-EWZSearchBundle
-=============
+# EWZ Search Bundle
 
-[![Build Status](https://api.travis-ci.org/excelwebzone/EWZSearchBundle.svg)](https://travis-ci.org/excelwebzone/EWZSearchBundle)
+`excelwebzone/search-bundle` integrates the maintained Zend Search Lucene fork into Symfony applications.
 
-This bundle provides advance search capability for Symfony.
+## Requirements
+
+- PHP 8.5
+- Symfony 7.4
+- `excelwebzone/zend-search` 2.x
+- PHP extensions `iconv` and `mbstring`
 
 ## Installation
-Installation depends on how your project is setup:
 
-### Installation using composer
-Execute require command.
-``` bash
-$ composer require excelwebzone/search-bundle "^1.0"
+```bash
+composer require excelwebzone/search-bundle:^2.0
 ```
-Enable the bundle in `AppKernel.php`.
-``` php
+
+Register the bundle in `config/bundles.php`:
+
+```php
 <?php
 
-// in AppKernel::registerBundles()
-$bundles = array(
+return [
     // ...
-   	new EWZ\Bundle\SearchBundle\EWZSearchBundle(),
-    // ...
-);
+    EWZ\Bundle\SearchBundle\EWZSearchBundle::class => ['all' => true],
+];
 ```
 
 ## Configuration
-Define your search indices in the config.yml. You can use the EWZSearchBundle with multiple search indices and with various Analyzers. 
 
-**NOTE**: If you want to include numbers in your search queries then you'll need to set
-analyzer to Zend\Search\Lucene\Analysis\Analyzer\Common\TextNum\CaseInsensitive
-See http://framework.zend.com/manual/en/zend.search.lucene.extending.html for more information
+### Named indexes
 
-For backward compatability reasons the old and new config both work.
-
-### using one or more SearchIndex => new config
-
-``` yaml
-# app/config/config.yml
+```yaml
+# config/packages/ewz_search.yaml
 ewz_search:
     indices:
-        indexFoo:
-            path:                 %kernel.root_dir%/EwzLuceneIndices/%kernel.environment%/myIndexFoo
-            analyzer:             Zend\Search\Lucene\Analysis\Analyzer\Common\Utf8\CaseInsensitive
-        indexBar:
-            path:                 %kernel.root_dir%/EwzLuceneIndices/%kernel.environment%/myIndexBar
-            analyzer:             Zend\Search\Lucene\Analysis\Analyzer\Common\TextNum\CaseInsensitive
-
-    # deprecated
-    analyzer:             Zend\Search\Lucene\Analysis\Analyzer\Common\TextNum\CaseInsensitive
-    path:                 %kernel.root_dir%/cache/%kernel.environment%/lucene/index
+        content:
+            path: '%kernel.project_dir%/var/lucene/%kernel.environment%/content'
+            analyzer: 'Zend\Search\Lucene\Analysis\Analyzer\Common\TextNum\CaseInsensitive'
+        people:
+            path: '%kernel.project_dir%/var/lucene/%kernel.environment%/people'
+            analyzer: 'Zend\Search\Lucene\Analysis\Analyzer\Common\Utf8\CaseInsensitive'
 ```
 
-### using only one SearchIndex => old config
+Access a named index through the public manager service:
 
-``` yaml
-# app/config/config.yml
+```yaml
+# config/services.yaml
+services:
+    App\Search\ContentSearch:
+        arguments:
+            $indexManager: '@ewz_search.lucene.manager'
+```
+
+```php
+<?php
+
+use EWZ\Bundle\SearchBundle\Lucene\Document;
+use EWZ\Bundle\SearchBundle\Lucene\Field;
+use EWZ\Bundle\SearchBundle\Lucene\LuceneIndexManager;
+
+final class ContentSearch
+{
+    public function __construct(private readonly LuceneIndexManager $indexManager)
+    {
+    }
+
+    public function index(string $id, string $title, string $body): void
+    {
+        $search = $this->indexManager->getIndex('content');
+        if (null === $search) {
+            throw new \LogicException('The content search index is not configured.');
+        }
+
+        $document = new Document();
+        $document->addField(Field::keyword('key', $id));
+        $document->addField(Field::text('title', $title));
+        $document->addField(Field::unStored('body', $body));
+
+        $search->addDocument($document);
+        $search->updateIndex();
+    }
+}
+```
+
+Every document added through `LuceneSearch` must contain a `key` field. Adding or updating a document replaces an existing document with the same key.
+
+### Original single-index configuration
+
+The original service and configuration remain supported:
+
+```yaml
+# config/packages/ewz_search.yaml
 ewz_search:
-    analyzer: Zend\Search\Lucene\Analysis\Analyzer\Common\TextNum\CaseInsensitive
-    path:     %kernel.root_dir%/cache/%kernel.environment%/lucene/index
+    path: '%kernel.project_dir%/var/lucene/%kernel.environment%/default'
+    analyzer: 'Zend\Search\Lucene\Analysis\Analyzer\Common\TextNum\CaseInsensitive'
 ```
 
-Congratulations! You're ready!
+Inject the service explicitly:
 
-## Basic Usage
-
-### Getting the index
-Depending on you configuration you can get access to the LuceneSearch object for your index in one of the following ways:
-
-``` php
-<?php
-
-use EWZ\Bundle\SearchBundle\Lucene\LuceneSearch;
-
-// with the new configuration-style
-$luceneSearchForFooIndex = $this->get('ewz_search.lucene.manager')->getIndex('indexFoo');
-$luceneSearchForBarIndex = $this->get('ewz_search.lucene.manager')->getIndex('indexBar');
-
-// with the old configuration-style
-$search = $this->get('ewz_search.lucene');
+```yaml
+services:
+    App\Search\LegacySearchConsumer:
+        arguments:
+            $search: '@ewz_search.lucene'
 ```
 
-### Use the index
-To index an object use the following example:
+## Searching
 
-``` php
-<?php
-
-use EWZ\Bundle\SearchBundle\Lucene\LuceneSearch;
-
-$search = $this->get('ewz_search.lucene.manager')->getIndex('indexFoo');
-
-$document = new Document();
-$document->addField(Field::keyword('key', $story->getId()));
-$document->addField(Field::text('title', $story->getTitle()));
-$document->addField(Field::text('url', $story->getUrl()));
-$document->addField(Field::unstored('body', $story->getDescription()));
-
-$search->addDocument($document);
-$search->updateIndex();
+```php
+$results = $search->find('Symfony');
 ```
 
-When you want to retrieve data, use:
+The returned values are Zend Search `QueryHit` objects. Stored fields can be read as properties or through the hit document.
 
-``` php
-<?php
+## Index compatibility
 
-use EWZ\Bundle\SearchBundle\Lucene\LuceneSearch;
+Version 2.0 uses `excelwebzone/zend-search:^2.0`. That release keeps the Lucene implementation and on-disk index format unchanged while adding PHP 8.5 support. Existing indexes can therefore be reused, but deployments should still back up and test a production-shaped index before switching runtimes.
 
-$search = $this->get('ewz_search.lucene.manager')->getIndex('indexFoo');
-$query = 'Symfony2';
+## Development
 
-$results = $search->find($query);
+```bash
+composer update
+composer lint
+composer test
 ```
 
-**NOTE**: See the Zend documentation for more information.
+GitHub Actions validates stable and lowest supported dependency sets on PHP 8.5, compiles the Symfony dependency-injection configuration, and exercises index creation, add/update/delete, search and reopen behavior.
+
+See [UPGRADE.md](UPGRADE.md) for the 1.x to 2.0 migration steps.

@@ -1,10 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<phpunit bootstrap="./tests/bootstrap.php" colors="true">
-
-  <testsuites>
-    <testsuite name="EWZSearchBundle">
-      <directory>tests/</directory>
-    </testsuite>
-  </testsuites>
-
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/12.5/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         cacheDirectory=".phpunit.cache"
+         colors="true"
+         beStrictAboutOutputDuringTests="true"
+         failOnRisky="true"
+         failOnWarning="true">
+    <testsuites>
+        <testsuite name="EWZ Search Bundle PHP 8.5 Test Suite">
+            <directory suffix="Test.php">tests</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory suffix=".php">src</directory>
+        </include>
+    </source>
 </phpunit>

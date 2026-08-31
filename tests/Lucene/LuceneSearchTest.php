@@ -1,102 +1,153 @@
 <?php
 
+declare(strict_types=1);
+
 namespace EWZ\Tests\Bundle\SearchBundle\Lucene;
 
-use EWZ\Bundle\SearchBundle\Lucene\LuceneSearch;
 use EWZ\Bundle\SearchBundle\Lucene\Document;
 use EWZ\Bundle\SearchBundle\Lucene\Field;
+use EWZ\Bundle\SearchBundle\Lucene\LuceneSearch;
+use PHPUnit\Framework\TestCase;
 use Zend\Search\Lucene\Index;
 
-class LuceneSearchTest extends \PHPUnit_Framework_TestCase
+final class LuceneSearchTest extends TestCase
 {
-    /** @var LuceneSearch */
-    protected $search;
+    private string $indexDirectory;
+    private ?LuceneSearch $search = null;
 
-    public function setUp()
+    protected function setUp(): void
     {
-        $this->recursiveDelete(__DIR__ . '/../cache');
-        $this->search = new LuceneSearch(__DIR__ . '/../cache');
+        $this->indexDirectory = sys_get_temp_dir().'/azine-search-bundle-'.bin2hex(random_bytes(8));
+        $this->search = new LuceneSearch($this->indexDirectory);
     }
 
-    public function testInitiatesLucene()
+    protected function tearDown(): void
     {
-        $this->assertEquals('Zend\Search\Lucene\Index', get_class($this->search->getIndex()), 'return the index object that should have been created on construct');
-    }
-
-    public function testAddDocument()
-    {
-        $doc = new Document();
-        $doc->addField(Field::keyword('key','1'));
-        $this->search->addDocument($doc);
-
-        $this->assertEquals(1, $this->search->getIndex()->count(), 'a document should be excepted');
-    }
-
-    public function testProcessDocuments()
-    {
-        $greatDoc = new Document();
-        $greatDoc->addField(Field::keyword('key', '1'));
-        $greatDoc->addField(Field::keyword('url', 'domain.com/great-article'));
-        $greatDoc->addField(Field::unIndexed('id', '123'));
-        $greatDoc->addField(Field::text('title', 'This is a great article about great things'));
-        $greatDoc->addField(Field::unstored('body', 'There are so many great things to talk about, isn\' that great?'));
-
-        $unrelatedDoc = new Document();
-        $unrelatedDoc->addField(Field::keyword('key', '2'));
-        $unrelatedDoc->addField(Field::keyword('url', 'domain.com/not-related-article'));
-        $unrelatedDoc->addField(Field::unIndexed('id', '234'));
-        $unrelatedDoc->addField(Field::text('title', 'Ramblings of a mad man'));
-        $unrelatedDoc->addField(Field::unstored('body', 'I\'m not talking about anything here'));
-
-        $goodDoc = new Document();
-        $goodDoc->addField(Field::keyword('key', '3'));
-        $goodDoc->addField(Field::keyword('url', 'domain.com/good-article'));
-        $goodDoc->addField(Field::unIndexed('id', '345'));
-        $goodDoc->addField(Field::text('title', 'This is a good article about good things'));
-        $goodDoc->addField(Field::unstored('body', 'There are so many good things to talk about, isn\'t that great?'));
-
-        $this->search->addDocument($greatDoc);
-        $this->search->addDocument($unrelatedDoc);
-        $this->search->addDocument($goodDoc);
-
-        $this->search->updateIndex();
-
-        /** @var array of  $results */
-        $results = $this->search->find('great');
-
-        $this->assertEquals(2, \sizeof($results), '2 results are expected');
-        $this->assertEquals(123, $results[0]->getDocument()->getFieldValue('id'), 'make sure the higher relevance is first');
-
-    }
-
-    public function testDeleteDocument()
-    {}
-
-    public function testUpdateDocument()
-    {}
-
-    public function testGetFieldType()
-    {}
-
-    public function tearDown()
-    {
+        $this->search = null;
+        $this->removeDirectory($this->indexDirectory);
         parent::tearDown();
-        $reflectionClass = new \ReflectionClass(Index::class);
-        $reflectionProperty = $reflectionClass->getProperty('_hasChanges');
-        $reflectionProperty->setAccessible(true);
-        $reflectionProperty->setValue($this->search->getIndex(), false);
     }
 
-    protected function recursiveDelete($str)
+    public function testCreatesALuceneIndex(): void
     {
-        if (is_file($str)) {
-            return @unlink($str);
-        } elseif (is_dir($str)) {
-            $scan = glob(rtrim($str, '/') . '/*');
-            foreach ($scan as $index => $path) {
-                $this->recursiveDelete($path);
-            }
-            return @rmdir($str);
+        self::assertInstanceOf(Index::class, $this->search()->getIndex());
+    }
+
+    public function testAddsAndCommitsADocument(): void
+    {
+        $this->search()->addDocument($this->document('1', 'First article', 'searchable content'));
+        $this->search()->updateIndex();
+
+        self::assertSame(1, $this->search()->getIndex()->count());
+        self::assertCount(1, $this->search()->find('searchable'));
+    }
+
+    public function testReturnsTheMoreRelevantDocumentFirst(): void
+    {
+        $great = $this->document(
+            '1',
+            'This is a great article about great things',
+            'There are many great things to discuss.',
+            '123',
+        );
+        $unrelated = $this->document(
+            '2',
+            'Ramblings of a mad person',
+            'This document discusses something unrelated.',
+            '234',
+        );
+        $good = $this->document(
+            '3',
+            'This is a good article about good things',
+            'There are good things to discuss, including one great example.',
+            '345',
+        );
+
+        $this->search()->addDocument($great);
+        $this->search()->addDocument($unrelated);
+        $this->search()->addDocument($good);
+        $this->search()->updateIndex();
+
+        $results = $this->search()->find('great');
+
+        self::assertCount(2, $results);
+        self::assertSame('123', $results[0]->getDocument()->getFieldValue('id'));
+    }
+
+    public function testDeletesTheDocumentWithTheSameKey(): void
+    {
+        $document = $this->document('delete-me', 'Disposable article', 'deletiontoken');
+        $this->search()->addDocument($document);
+        $this->search()->updateIndex();
+        self::assertCount(1, $this->search()->find('deletiontoken'));
+
+        $this->search()->deleteDocument($document);
+        $this->search()->updateIndex();
+
+        self::assertCount(0, $this->search()->find('deletiontoken'));
+    }
+
+    public function testUpdatesByReplacingTheDocumentWithTheSameKey(): void
+    {
+        $this->search()->addDocument($this->document('same-key', 'Old article', 'legacytoken'));
+        $this->search()->updateIndex();
+
+        $this->search()->updateDocument($this->document('same-key', 'New article', 'replacementtoken'));
+        $this->search()->updateIndex();
+
+        self::assertCount(0, $this->search()->find('legacytoken'));
+        $replacementResults = $this->search()->find('replacementtoken');
+        self::assertCount(1, $replacementResults);
+        self::assertSame('New article', $replacementResults[0]->title);
+    }
+
+    public function testReopensAndSearchesAnExistingIndex(): void
+    {
+        $this->search()->addDocument($this->document('persisted', 'Persistent article', 'reopentoken'));
+        $this->search()->updateIndex();
+        $this->search = null;
+
+        $this->search = new LuceneSearch($this->indexDirectory);
+        $results = $this->search()->find('reopentoken');
+
+        self::assertCount(1, $results);
+        self::assertSame('persisted', $results[0]->key);
+    }
+
+    private function document(string $key, string $title, string $body, string $id = '1'): Document
+    {
+        $document = new Document();
+        $document->addField(Field::keyword('key', $key));
+        $document->addField(Field::keyword('url', 'https://example.test/'.$key));
+        $document->addField(Field::unIndexed('id', $id));
+        $document->addField(Field::text('title', $title));
+        $document->addField(Field::unStored('body', $body));
+
+        return $document;
+    }
+
+    private function search(): LuceneSearch
+    {
+        self::assertNotNull($this->search);
+
+        return $this->search;
+    }
+
+    private function removeDirectory(string $directory): void
+    {
+        if (!is_dir($directory)) {
+            return;
         }
+
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST,
+        );
+
+        foreach ($iterator as $item) {
+            $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
+        }
+
+        rmdir($directory);
     }
 }
