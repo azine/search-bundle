@@ -1,42 +1,48 @@
 <?php
 
+declare(strict_types=1);
+
 namespace EWZ\Bundle\SearchBundle\DependencyInjection;
 
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 
-/**
- * This is the class that validates and merges configuration from your app/config files
- *
- * To learn more see {@link http://symfony.com/doc/current/cookbook/bundles/extension.html#cookbook-bundles-extension-config-class}
- */
-class Configuration implements ConfigurationInterface
+final class Configuration implements ConfigurationInterface
 {
-    /**
-     * {@inheritDoc}
-     */
-    public function getConfigTreeBuilder()
+    private const DEFAULT_ANALYZER = 'Zend\\Search\\Lucene\\Analysis\\Analyzer\\Common\\TextNum\\CaseInsensitive';
+
+    public function getConfigTreeBuilder(): TreeBuilder
     {
-        $treeBuilder = new TreeBuilder();
-        $rootNode = $treeBuilder->root('ewz_search');
+        $treeBuilder = new TreeBuilder('ewz_search');
+        $rootNode = $treeBuilder->getRootNode();
 
         $rootNode
             ->children()
-            	->arrayNode('indices')
-             		->useAttributeAsKey('name')
-             		->prototype('array')
-	 		            ->children()
-			            	->scalarNode('path')->defaultValue('%kernel.root_dir%/EwzLuceneIndices/%kernel.environment%/defaultIndex')->end()
-	 		                ->scalarNode('analyzer')->defaultValue('Zend\Search\Lucene\Analysis\Analyzer\Common\TextNum\CaseInsensitive')->end()
-	 		            ->end()
-	 				->end()
- 				->end()
-
- 				// for BC reasons only
-                ->scalarNode('analyzer')->defaultValue('Zend\Search\Lucene\Analysis\Analyzer\Common\TextNum\CaseInsensitive')->end()
-                ->scalarNode('path')->defaultValue('%kernel.root_dir%/cache/%kernel.environment%/lucene/index')->end()
-            ->end()
-        ;
+                ->arrayNode('indices')
+                    ->useAttributeAsKey('name')
+                    ->arrayPrototype()
+                        ->children()
+                            ->scalarNode('path')
+                                ->defaultValue('%kernel.project_dir%/var/lucene/%kernel.environment%/defaultIndex')
+                                ->cannotBeEmpty()
+                            ->end()
+                            ->scalarNode('analyzer')
+                                ->defaultValue(self::DEFAULT_ANALYZER)
+                                ->cannotBeEmpty()
+                            ->end()
+                        ->end()
+                    ->end()
+                ->end()
+                // Kept for applications that use the original single-index configuration.
+                ->scalarNode('analyzer')
+                    ->defaultValue(self::DEFAULT_ANALYZER)
+                    ->cannotBeEmpty()
+                ->end()
+                ->scalarNode('path')
+                    ->defaultValue('%kernel.project_dir%/var/cache/%kernel.environment%/lucene/index')
+                    ->cannotBeEmpty()
+                ->end()
+            ->end();
 
         return $treeBuilder;
     }
