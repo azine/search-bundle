@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace EWZ\Bundle\SearchBundle\Lucene;
 
-use Zend\Search\Lucene\Analysis\Analyzer\Analyzer;
+use Zend\Search\Lucene\Analysis\Analyzer as AnalyzerInterface;
+use Zend\Search\Lucene\Analysis\Analyzer\Analyzer as AnalyzerManager;
 use Zend\Search\Lucene\Document as ZendDocument;
 use Zend\Search\Lucene\Index;
 use Zend\Search\Lucene\Index\Term;
@@ -15,20 +16,20 @@ class LuceneSearch
     protected Index $index;
 
     /**
-     * @param class-string<Analyzer>|null $analyzer
+     * @param class-string<AnalyzerInterface>|null $analyzer
      */
     public function __construct(string $luceneIndexPath, ?string $analyzer = null)
     {
         if (null !== $analyzer) {
-            if (!is_a($analyzer, Analyzer::class, true)) {
+            if (!is_a($analyzer, AnalyzerInterface::class, true)) {
                 throw new \InvalidArgumentException(sprintf(
-                    'The configured analyzer "%s" must extend %s.',
+                    'The configured analyzer "%s" must implement %s.',
                     $analyzer,
-                    Analyzer::class,
+                    AnalyzerInterface::class,
                 ));
             }
 
-            Analyzer::setDefault(new $analyzer());
+            AnalyzerManager::setDefault(new $analyzer());
         }
 
         $this->index = file_exists($luceneIndexPath)
