@@ -1,26 +1,25 @@
 <?php
 
+declare(strict_types=1);
+
 namespace EWZ\Bundle\SearchBundle\Lucene;
 
 use Zend\Search\Lucene\Document as ZendDocument;
 
 class Document extends ZendDocument
 {
-    /**
-     * Returns type for a named field in this document.
-     *
-     * @param string $fieldName
-     *
-     * @return string
-     *
-     * @throws \Exception
-     */
-    public function getFieldType($fieldName)
+    public function getFieldType(string $fieldName): string
     {
-        if (!array_key_exists($fieldName, $this->_fields)) {
-            throw new \Exception("Field name \"$fieldName\" not found in document.");
+        $field = $this->getField($fieldName);
+
+        if (!$field instanceof Field) {
+            throw new \LogicException(sprintf(
+                'Field "%s" was not created through %s and has no bundle field type.',
+                $fieldName,
+                Field::class,
+            ));
         }
 
-        return $this->_fields[$fieldName]->getType ();
+        return $field->getType();
     }
 }
