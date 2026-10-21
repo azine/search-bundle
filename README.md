@@ -4,7 +4,7 @@
 
 ## Requirements
 
-- PHP 8.5
+- PHP 8.5.12+
 - Symfony 7.4
 - `excelwebzone/zend-search` 2.x
 - PHP extensions `iconv` and `mbstring`

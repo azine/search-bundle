@@ -1,10 +1,10 @@
 # Upgrade to 2.0
 
-Version 2.0 is the PHP 8.5 / Symfony 7.4 compatibility release.
+Version 2.0 is the PHP 8.5.12 / Symfony 7.4 compatibility release.
 
 ## Runtime and dependency changes
 
-- Upgrade the application to PHP 8.5 and Symfony 7.4.
+- Upgrade the application to PHP 8.5.12 and Symfony 7.4.
 - Require `excelwebzone/search-bundle:^2.0`.
 - Require/allow `excelwebzone/zend-search:^2.0`; development branch aliases are no longer needed.
 - Enable `iconv` and `mbstring`.
@@ -37,7 +37,7 @@ Inject these services explicitly from `config/services.yaml`.
 The underlying Zend Search 2.0 release does not change the Lucene implementation or on-disk format. Existing indexes can be reused. Before production rollout:
 
 1. back up the index directory;
-2. open and query a production-shaped copy on PHP 8.5;
+2. open and query a production-shaped copy on PHP 8.5.12;
 3. run representative searches and compare result ordering;
 4. verify a clean rebuild from the application database;
 5. document the chosen reuse or rebuild deployment path.
